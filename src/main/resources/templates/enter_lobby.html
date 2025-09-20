@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8"/>
+		<title>Home Page</title>
+	</head>
+	<body>
+		<h1>Please Enter a Nickname</h1>
+		<form method="POST" th:action="@{/room/join/{id}(id=${room_id})}">
+			<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+			<input type="text" name="nickname"/>
+			<input type="submit" name="Join"/>
+		</form>
+	</body>
+</html>

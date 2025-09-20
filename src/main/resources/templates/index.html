@@ -6,7 +6,15 @@
 	</head>
 	<body>
 		<h1>Welcome to Werewolf!</h1>
-		<a href="/new-game"><button>Create a New Game</button></a>
-		<a href="/join-game"><button>Join a new game</button></a>
+		<form th:action="@{/room/create}" method="post">
+			<!-- CSRF (keep if you didn’t disable it) -->
+			<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+			<button type="submit">Create new game</button>
+		</form>
+		<form action="/room/enter" method="GET">
+			<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+			<input type="text" name="room_id" placeholder="Room Identifier"/>
+			<button type="submit">Join a room</button>
+		</form>
 	</body>
 </html>

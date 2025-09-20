@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Werewolf Lobby</title>
+</head>
+<body>
+    <h1 th:text="'Room ' + ${lobby.room_id}"></h1>
+    <p th:text="'Host: ' + ${lobby.host_id}"></p>
+
+    <h2 th:if="${lobby.status.name() == 'LOBBY'}">Game has not started yet</h2>
+    <h2 th:if="${lobby.status.name() == 'STARTED'}">Game is running</h2>
+
+    <p>Participants:</p>
+    <ul>
+        <li th:each="p : ${lobby.players}">
+            <span th:text="${p.nickname}"></span>
+            <span th:text="${p.ready} ? '✅ Ready' : '❌ Not Ready'"></span>
+        </li>
+    </ul>
+</body>
+</html>

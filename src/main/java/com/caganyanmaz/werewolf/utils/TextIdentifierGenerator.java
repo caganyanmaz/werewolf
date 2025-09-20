@@ -5,6 +5,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -21,7 +22,7 @@ public class TextIdentifierGenerator {
     private final String WORDS_PATH = "words.txt";
     private final int WORD_COUNT_PER_IDENTIFIER = 5;
     private List<String> words;
-    private Set<String> prev_identifiers;
+    private Set<String> prev_identifiers = ConcurrentHashMap.newKeySet();
 
     private TextIdentifierGenerator() {
         initialize_dictionary();
