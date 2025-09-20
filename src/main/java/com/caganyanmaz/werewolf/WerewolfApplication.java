@@ -1,4 +1,4 @@
-package com.example.springboot;
+package com.caganyanmaz.werewolf;
 
 import java.util.Arrays;
 
