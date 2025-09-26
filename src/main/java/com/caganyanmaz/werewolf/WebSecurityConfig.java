@@ -43,6 +43,7 @@ public class WebSecurityConfig {
                     org.springframework.security.config.http.SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(req -> req
                     .requestMatchers("/enter", "/error", "/css/**", "/js/**").permitAll()
+                    .requestMatchers("/ws").authenticated()
                     .anyRequest().authenticated())
             .exceptionHandling(ex -> ex
                     .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/enter")))

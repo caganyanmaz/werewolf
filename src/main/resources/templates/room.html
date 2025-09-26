@@ -1,22 +1,127 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8"/>
-    <title>Werewolf Lobby</title>
+  <meta charset="UTF-8" />
+  <title>Werewolf Lobby</title>
+  <meta name="_csrf" th:content="${_csrf.token}"/>
+  <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
 </head>
 <body>
-    <h1 th:text="'Room ' + ${lobby.room_id}"></h1>
-    <p th:text="'Host: ' + ${lobby.host_id}"></p>
+  <div id="app"></div>
 
-    <h2 th:if="${lobby.status.name() == 'LOBBY'}">Game has not started yet</h2>
-    <h2 th:if="${lobby.status.name() == 'STARTED'}">Game is running</h2>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+  <script th:inline="javascript">
+    // ----- bootstrap -----
+    // later, read it:     
+    /*<![CDATA[*/
+    const initial_lobby = /*[[${lobby}]]*/;
+    const player_id = /*[[${player_id}]]*/;
+    /*]]>*/           
+    const room_id  = initial_lobby.room_id; // field names match your LobbyView record
+    const token   = document.querySelector('meta[name="_csrf"]').content;
+    const header  = document.querySelector('meta[name="_csrf_header"]').content;
 
-    <p>Participants:</p>
-    <ul>
-        <li th:each="p : ${lobby.players}">
-            <span th:text="${p.nickname}"></span>
-            <span th:text="${p.ready} ? '✅ Ready' : '❌ Not Ready'"></span>
-        </li>
-    </ul>
+    // skeleton HTML (no Thymeleaf loops now)
+    const app = document.getElementById('app');
+    app.innerHTML = `
+      <h1>Room code: <span id="room-code"></span></h1>
+      <p>Host: <span id="host-id"></span></p>
+      <h2 id="game-status"></h2>
+      <p>Participants:</p>
+      <ul id="participants"></ul>
+      <div id="host-actions"></div>
+    `;
+    console.log(app.innerHTML);
+
+    // render functions
+    function render_lobby(lobby) {
+      document.getElementById('room-code').textContent = lobby.room_id;
+      document.getElementById('host-id').textContent   = lobby.host_id;
+
+      const ul = document.getElementById('participants');
+      ul.innerHTML = '';
+      lobby.players.forEach(p => {
+        const li = document.createElement('li');
+        if (p.id === player_id) {
+          li.innerHTML = `
+            <span>${escape_html(p.nickname)}</span>
+            <button class="ready-btn" data-ready="${p.ready}">
+              <span>${p.ready ? '✅ Ready' : '❌ Not Ready'}</span>
+            </button>
+          `;
+        } else {
+          li.innerHTML = `
+            <span>${escape_html(p.nickname)}</span>
+            <span> ${p.ready ? '✅ Ready' : '❌ Not Ready'}</span>
+          `;
+        }
+        ul.appendChild(li);
+        const host_actions_div = document.getElementById("host-actions");
+        host_actions_div.innerHTML = "";
+        if (player_id == lobby.host_id) {
+            const start_button = document.createElement("button");
+            start_button.innerText = "Start Game";
+            host_actions_div.appendChild(start_button);
+        }
+      });
+
+      // wire handlers for the single current-player button (if present)
+      const btn = ul.querySelector('.ready-btn');
+      if (btn) {
+        btn.onclick = async () => {
+          const current = btn.getAttribute('data-ready') === 'true';
+          const next = !current;
+          // optimistic
+          btn.setAttribute('data-ready', String(next));
+          btn.querySelector('span').textContent = next ? '✅ Ready' : '❌ Not Ready';
+          try {
+            const res = await fetch(`/room/${room_id}/players/${player_id}/ready`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', [header]: token },
+              body: JSON.stringify({ ready: next })
+            });
+            if (!res.ok) {
+              // revert
+              btn.setAttribute('data-ready', String(current));
+              btn.querySelector('span').textContent = current ? '✅ Ready' : '❌ Not Ready';
+              console.error('Toggle failed', res.status, await res.text());
+            }
+          } catch (e) {
+            btn.setAttribute('data-ready', String(current));
+            btn.querySelector('span').textContent = current ? '✅ Ready' : '❌ Not Ready';
+            console.error(e);
+          }
+        };
+      }
+
+      const status = document.getElementById('game-status');
+      status.textContent = lobby.status === 'LOBBY' ? 'Game has not started yet' : 'Game is running';
+    }
+
+    function escape_html(s) {
+      return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')
+                      .replaceAll('>','&gt;').replaceAll('"','&quot;')
+                      .replaceAll("'",'&#039;');
+    }
+
+    // initial render
+    render_lobby(initial_lobby);
+
+    // ----- websocket wiring -----
+    const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+    const client = new StompJs.Client({
+      brokerURL: wsUrl,
+      reconnectDelay: 1000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      debug: (s)=>console.log('[STOMP]', s),
+      onConnect: () => {
+        client.subscribe(`/topic/room.${room_id}.lobby`, (msg) => render_lobby(JSON.parse(msg.body)));
+        client.subscribe(`/topic/room.${room_id}.events`, (msg) => {/* handleEvent(JSON.parse(msg.body)) */});
+        client.subscribe(`/topic/room.${room_id}.game`,   (msg) => {/* renderGame(JSON.parse(msg.body))  */});
+      }
+    });
+    client.activate();
+  </script>
 </body>
 </html>

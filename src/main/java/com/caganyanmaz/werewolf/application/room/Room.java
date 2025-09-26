@@ -12,10 +12,8 @@ public class Room {
     private final String room_id;
     private String host_id;
     private RoomStatus status = RoomStatus.LOBBY;
-    private Map<String, String> id_to_nickname;
 
     private final Map<String, Participant> participants = new LinkedHashMap<>();
-
     // reference to a domain game id (once started, null while in lobby)
     private String game_id;
 
@@ -36,6 +34,10 @@ public class Room {
     public void toggle_ready(String player_id, boolean ready) {
         var p = participants.get(player_id);
         participants.put(player_id, new Participant(p.player_id(), p.nickname(), ready));
+    }
+
+    public boolean is_player_in_room(String player_id) {
+        return participants.containsKey(player_id);
     }
 
     public boolean is_host(String player_id) {

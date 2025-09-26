@@ -10,4 +10,5 @@ public class InMemoryRoomRepository implements RoomRepository {
     private final InMemoryRepository<Room> repo = new InMemoryRepository<Room>(Room::room_id);
     @Override public Room get(String id) { return repo.get(id); }
     @Override public void save(Room room) { repo.save(room); }
+    @Override public boolean exists(String id) { return repo.exists(id); }
 }

@@ -31,11 +31,9 @@ public class RoomService {
     }
 
     public void add_participant_to_room(String room_id, String player_id, String nickname) {
+        Room room = rooms.get(room_id);
         rooms.get(room_id).add_participant(player_id, nickname);
-    }
-
-    public boolean is_player_in_room(String room_id, String player_id) {
-        rooms.get(room_id).is_player_in(player_id);
+        events.lobby_changed(room_id, LobbyView.from(room));
     }
 
     public LobbyView get_lobby_view(String room_id) {
@@ -43,6 +41,15 @@ public class RoomService {
         return LobbyView.from(r);
     }
 
+    public void update_player_ready(String room_id, String player_id, boolean ready) {
+        Room room = rooms.get(room_id);
+        room.toggle_ready(player_id, ready);
+        events.lobby_changed(room_id, LobbyView.from(room));
+    }
+
+    public boolean is_player_in_lobby(String room_id, String player_id) {
+        return rooms.exists(room_id) && rooms.get(room_id).is_player_in_room(player_id);
+    }
 
     public record LobbyView(String room_id,
                         String host_id,
