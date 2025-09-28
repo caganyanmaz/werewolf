@@ -1,5 +1,4 @@
 package com.caganyanmaz.werewolf.application.room;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -12,10 +11,10 @@ import java.util.concurrent.TimeUnit;
 
 import org.springframework.stereotype.Service;
 
-import com.caganyanmaz.werewolf.application.ports.GameRepository;
+import com.caganyanmaz.werewolf.application.game.GameSession;
+import com.caganyanmaz.werewolf.application.ports.GameSessionRepository;
 import com.caganyanmaz.werewolf.application.ports.RoomRepository;
 import com.caganyanmaz.werewolf.domain.Phase;
-import com.caganyanmaz.werewolf.domain.Role;
 import com.caganyanmaz.werewolf.utils.TextIdentifierGenerator;
 
 /**
@@ -27,7 +26,7 @@ import com.caganyanmaz.werewolf.utils.TextIdentifierGenerator;
 @Service
 public class RoomService {
     private final RoomRepository rooms;
-    private final GameRepository games;
+    private final GameSessionRepository game_sessions;
     private final RoomEvents events;
     private final ScheduledExecutorService scheduler;
 
@@ -35,11 +34,11 @@ public class RoomService {
     private final ConcurrentMap<String, RoomTimers> timers = new ConcurrentHashMap<>();
 
     public RoomService(RoomRepository rooms,
-                       GameRepository games,
+                       GameSessionRepository game_sessions,
                        RoomEvents events,
                        ScheduledExecutorService scheduler) {
         this.rooms = rooms;
-        this.games = games;
+        this.game_sessions = game_sessions;
         this.events = events;
         this.scheduler = scheduler;
     }
@@ -65,6 +64,11 @@ public class RoomService {
         return LobbyView.from(r);
     }
 
+    public GameView get_game_view(String game_id) {
+        GameSession game_session = game_sessions.get(game_id);
+        return GameView.from(game_session);
+    }
+
     public void update_player_ready(String room_id, String player_id, boolean ready) {
         Room room = rooms.get(room_id);
         room.toggle_ready(player_id, ready);
@@ -80,19 +84,24 @@ public class RoomService {
         return rooms.exists(room_id) && rooms.get(room_id).is_player_in_room(player_id);
     }
 
-    /** TODO: implement your real start criteria */
-    public boolean is_game_able_to_start(String room_id) {
-        return true;
+    public boolean is_player_in_game(String game_id, String player_id) {
+        return game_sessions.exists(game_id) && game_sessions.get(game_id).is_player_in_room(player_id);
     }
 
-    /**
-     * TODO: set criteria to start the game
-     */
+    /** TODO: implement your real start criteria */
+    public boolean is_game_able_to_start(String room_id) {
+        return rooms.exists(room_id) && !rooms.get(room_id).is_game_started();
+    }
+
     public void start_game(String room_id) {
-        Room room = rooms.get(room_id);
         System.out.println("Starting the game");
-        room.start_game();
-        events.lobby_changed(room_id, LobbyView.from(room));
+        cancel_lobby_timer(room_id);
+        Room room = rooms.get(room_id);
+        String game_id = "game_" + room_id;
+        GameSession game_session = new GameSession(game_id, room.participants());
+        game_sessions.save(game_session);
+        room.set_game_started();
+        events.game_started(room_id, game_id);
     }
 
     /* =====================  Minimal Timer Controls  ===================== */
@@ -118,13 +127,7 @@ public class RoomService {
         ScheduledFuture<?> f = scheduler.schedule(() -> {
             if (is_game_able_to_start(room_id)) {
                 start_game(room_id);
-            } else {
-                // Re-arm with same/min tweaked duration; keep it simple
-                events.notice(room_id, "Not enough players; restarting lobby timer.");
-                start_lobby_countdown(room_id, d, minPlayers);
             }
-            // Optional: emit a “timer fired” message if you have such an event method
-            events.timer_fired(room_id, "lobby-countdown", Map.of("kind", "LOBBY", "minPlayers", minPlayers));
         }, delayMs, TimeUnit.MILLISECONDS);
 
         timers(room_id).lobby().set(f);
@@ -136,48 +139,9 @@ public class RoomService {
         if (ref != null) ref.cancel(false);
     }
 
-    /** Start/restart the current phase with a deadline and broadcast. */
-    public void start_phase(String room_id, Phase phase, Duration d) {
-        cancel_phase_timer(room_id);
-
-        Instant now = Instant.now();
-        Instant end = now.plus(d);
-
-        // Update room state (status RUNNING, phase info in Room if you store it, and deadline)
-        Room room = rooms.get(room_id);
-        room.start_game();
-        room.set_deadline(end);
-
-        // Broadcast to clients (reuse lobby_changed to carry deadline; or call a phase event if you have one)
-        events.lobby_changed(room_id, LobbyView.from(room));
-        // If you have a dedicated event, prefer it:
-        // events.phase_changed(room_id, PhaseView.from(room, now, end));
-
-        long delayMs = Math.max(0, end.toEpochMilli() - Instant.now().toEpochMilli());
-        ScheduledFuture<?> f = scheduler.schedule(() -> {
-            // Advance to next phase
-            Phase current = phase;
-            Phase next = next_phase(room_id, current);
-            // Update room and re-arm
-            set_phase(room_id, next);
-            start_phase(room_id, next, default_phase_duration(next));
-
-            // Optional: announce phase-timer fired
-            events.timer_fired(room_id, "phase-" + current.name().toLowerCase(),
-                    Map.of("kind", "PHASE", "phase", current.name()));
-        }, delayMs, TimeUnit.MILLISECONDS);
-
-        timers(room_id).phase().set(f);
-    }
-
     public void cancel_phase_timer(String room_id) {
         var ref = timers(room_id).phase().getAndSet(null);
         if (ref != null) ref.cancel(false);
-    }
-
-    /** Extend the current phase by `by` (simple: cancel & re-start with new remaining). */
-    public void extend_phase(String room_id, Duration by) {
-        // TODO: Implement Later
     }
 
     /* =====================  Helpers & Model-Oriented Ops  ===================== */
@@ -186,29 +150,6 @@ public class RoomService {
         return timers.computeIfAbsent(room_id, __ -> new RoomTimers());
     }
 
-    /** Choose the next phase by your rules (tie handling, etc.). */
-    private Phase next_phase(String room_id, Phase current) {
-        // TODO: Implement this
-        return Phase.DAY;
-    }
-
-    /** Persist only the phase (no timer changes). */
-    private void set_phase(String room_id, Phase p) {
-        // TODO: Implement this later
-    }
-
-    private Duration default_phase_duration(Phase p) {
-        return Duration.ofSeconds(5);
-        /* 
-        return switch (p) {
-            case NIGHT   -> Duration.ofSeconds(90);
-            case DAY     -> Duration.ofMinutes(3);
-            case VOTE    -> Duration.ofSeconds(45);
-            case RESOLVE -> Duration.ofSeconds(10);
-            default      -> Duration.ofSeconds(0);
-        };
-        */
-    }
 
     /* =====================  DTOs you already expose  ===================== */
 
@@ -233,9 +174,28 @@ public class RoomService {
         }
     }
 
+    public record GameView(
+        String game_id, 
+        Phase phase,
+        List<PlayerView> players, 
+        Instant deadline, 
+        Instant server_now) {
+        public static GameView from(GameSession g) {
+            var ps = g.players().stream()
+                .map(p -> new PlayerView(p.player_id(), p.nickname(), p.alive()))
+                .toList();
+            return new GameView(
+                g.game_id(),
+                g.phase(),
+                ps,
+                g.deadline(),
+                Instant.now()
+            ); 
+        }
+    }
+
     public record LobbyPlayer(String id, String nickname, boolean ready) {}
-    public record GameView(String id, String name, boolean ready) {}
-    public record PlayerView(String id, String name, Role role, boolean alive) {}
+    public record PlayerView(String id, String name, boolean alive) {}
 
     /* =====================  Per-room futures holder  ===================== */
 

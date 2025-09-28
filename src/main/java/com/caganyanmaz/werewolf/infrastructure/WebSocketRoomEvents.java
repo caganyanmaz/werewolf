@@ -21,6 +21,7 @@ public class WebSocketRoomEvents implements RoomEvents {
 
     @Override
     public void game_started(String room_id, String game_id) {
+        System.out.println("/topic/room." + room_id + ".events");
         smt.convertAndSend("/topic/room." + room_id + ".events",
                    (Object) Map.of("type", "GAME_STARTED", "game_id", game_id));
     }

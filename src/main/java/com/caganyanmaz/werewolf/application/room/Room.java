@@ -12,10 +12,9 @@ public class Room {
     private final String room_id;
     private String host_id;
     private RoomStatus status = RoomStatus.LOBBY;
-
     private final Map<String, Participant> participants = new LinkedHashMap<>();
+    private boolean is_game_started = false;
     // reference to a domain game id (once started, null while in lobby)
-    private String game_id;
 
     private Instant timer_deadline;
     //private Duration day_duration;
@@ -55,6 +54,17 @@ public class Room {
         return participants.get(host_id).ready();
     }
 
+    public void set_game_started() {
+        if (is_game_started) {
+            throw new IllegalStateException("Game already started");
+        }
+        is_game_started = true;
+    }
+
+    public boolean is_game_started() {
+        return is_game_started;
+    }
+
     public Collection<Participant> participants() {
         return participants.values();
     }
@@ -70,29 +80,12 @@ public class Room {
         status = RoomStatus.COUNTDOWN;
     }
 
-    public void start_game() {
-        if (status != RoomStatus.COUNTDOWN && status != RoomStatus.LOBBY) {
-            throw new IllegalStateException();
-        }
-        status = RoomStatus.RUNNING;
-    }
-
     public String room_id() {
         return room_id;
     }
 
     public String host_id() {
         return host_id;
-    }
-
-    public String game_id() {
-        return game_id;
-    }
-
-    /* state transitions owned by application */
-    public void mark_running(String new_game_id) {
-        this.status = RoomStatus.RUNNING;
-        this.game_id = new_game_id;
     }
 
     public void set_deadline(Instant at) {

@@ -133,11 +133,11 @@
           endAtMs: server_deadline,
           onTick: (ms) => {lobby_countdown_timer.innerText = (Math.ceil(ms/1000))}
         })
-      } else {
-        console.assert(lobby.status === 'RUNNING');
-        window.location.href = `../game/${room_id}`;
-        status.textContent = "Game is running";
       }
+    }
+
+    function start_game(game_id) {
+      window.location.href = `../game/${game_id}`;
     }
 
     function escape_html(s) {
@@ -159,8 +159,14 @@
       debug: (s) => console.log('[STOMP]', s),
       onConnect: () => {
         client.subscribe(`/topic/room.${room_id}.lobby`, (msg) => render_lobby(JSON.parse(msg.body)));
-        client.subscribe(`/topic/room.${room_id}.events`, (msg) => {/* handleEvent(JSON.parse(msg.body)) */ });
-        client.subscribe(`/topic/room.${room_id}.game`, (msg) => {/* renderGame(JSON.parse(msg.body))  */ });
+        client.subscribe(`/topic/room.${room_id}.events`, (msg) => {
+          console.log(msg);
+          const res = JSON.parse(msg.body);
+          if (res.type === "GAME_STARTED") {
+            start_game(res.game_id);
+          }
+        });
+        client.subscribe(`/topic/room.${room_id}.game`, (msg) => { /*start_game(JSON.parse(msg.body))*/; });
       }
     });
     client.activate();
