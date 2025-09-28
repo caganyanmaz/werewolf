@@ -17,9 +17,8 @@ public class Room {
     // reference to a domain game id (once started, null while in lobby)
     private String game_id;
 
-    // optional timing metadata (application-level)
-    private Instant day_deadline;
-    private Duration day_duration;
+    private Instant timer_deadline;
+    //private Duration day_duration;
 
     public Room(String room_id, String host_id) {
         this.room_id = room_id;
@@ -43,6 +42,18 @@ public class Room {
     public boolean is_host(String player_id) {
         return Objects.equals(host_id, player_id);
     }
+    
+    public boolean is_everyone_ready() {
+        boolean result = true;
+        for (Participant participant : participants.values()) {
+            result = result && participant.ready();
+        }
+        return result;
+    }
+
+    public boolean is_host_ready() {
+        return participants.get(host_id).ready();
+    }
 
     public Collection<Participant> participants() {
         return participants.values();
@@ -50,6 +61,20 @@ public class Room {
 
     public RoomStatus status() {
         return status;
+    }
+
+    public void start_countdown() {
+        if (status != RoomStatus.LOBBY) {
+            throw new IllegalStateException();
+        }
+        status = RoomStatus.COUNTDOWN;
+    }
+
+    public void start_game() {
+        if (status != RoomStatus.COUNTDOWN && status != RoomStatus.LOBBY) {
+            throw new IllegalStateException();
+        }
+        status = RoomStatus.RUNNING;
     }
 
     public String room_id() {
@@ -70,11 +95,11 @@ public class Room {
         this.game_id = new_game_id;
     }
 
-    public void setDeadline(Instant at) {
-        this.day_deadline = at;
+    public void set_deadline(Instant at) {
+        this.timer_deadline = at;
     }
 
     public Optional<Instant> deadline() {
-        return Optional.ofNullable(day_deadline);
+        return Optional.ofNullable(timer_deadline);
     }
 }

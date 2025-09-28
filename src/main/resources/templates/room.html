@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
+
 <head>
   <meta charset="UTF-8" />
   <title>Werewolf Lobby</title>
-  <meta name="_csrf" th:content="${_csrf.token}"/>
-  <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+  <meta name="_csrf" th:content="${_csrf.token}" />
+  <meta name="_csrf_header" th:content="${_csrf.headerName}" />
 </head>
+
 <body>
   <div id="app"></div>
 
@@ -16,10 +18,11 @@
     /*<![CDATA[*/
     const initial_lobby = /*[[${lobby}]]*/;
     const player_id = /*[[${player_id}]]*/;
-    /*]]>*/           
-    const room_id  = initial_lobby.room_id; // field names match your LobbyView record
-    const token   = document.querySelector('meta[name="_csrf"]').content;
-    const header  = document.querySelector('meta[name="_csrf_header"]').content;
+    /*]]>*/
+    const room_id = initial_lobby.room_id; // field names match your LobbyView record
+    const host_id = initial_lobby.host_id;
+    const token = document.querySelector('meta[name="_csrf"]').content;
+    const header = document.querySelector('meta[name="_csrf_header"]').content;
 
     // skeleton HTML (no Thymeleaf loops now)
     const app = document.getElementById('app');
@@ -33,20 +36,46 @@
     `;
     console.log(app.innerHTML);
 
+    function start_counter({ endAtMs, onTick, intervalMs = 1000 }) {
+      let id = null;
+
+      function tick() {
+        const remaining = Math.max(0, endAtMs - Date.now());
+        onTick(remaining);
+        if (remaining === 0) stop(); // auto-stop on finish
+      }
+
+      id = setInterval(tick, intervalMs);
+      tick(); // run immediately
+
+      function stop() {
+        if (id !== null) { clearInterval(id); id = null; }
+      }
+      return stop;
+    }
+    let stop_counter = null;
+
     // render functions
     function render_lobby(lobby) {
+      // Stop any ongoing counters before rendering something else
+      if (stop_counter != null) {
+        stop_counter();
+      }
       document.getElementById('room-code').textContent = lobby.room_id;
-      document.getElementById('host-id').textContent   = lobby.host_id;
+      document.getElementById('host-id').textContent = lobby.host_id;
 
       const ul = document.getElementById('participants');
       ul.innerHTML = '';
       lobby.players.forEach(p => {
         const li = document.createElement('li');
         if (p.id === player_id) {
+          const span_ready_text = '✅ Ready';
+          const span_not_ready_text = '❌ Not Ready' + (player_id === host_id ? " (click to start the game)" : "");
+          const span_text = p.ready ? span_ready_text : span_not_ready_text;
           li.innerHTML = `
             <span>${escape_html(p.nickname)}</span>
             <button class="ready-btn" data-ready="${p.ready}">
-              <span>${p.ready ? '✅ Ready' : '❌ Not Ready'}</span>
+              <span>${span_text}</span>
             </button>
           `;
         } else {
@@ -56,13 +85,6 @@
           `;
         }
         ul.appendChild(li);
-        const host_actions_div = document.getElementById("host-actions");
-        host_actions_div.innerHTML = "";
-        if (player_id == lobby.host_id) {
-            const start_button = document.createElement("button");
-            start_button.innerText = "Start Game";
-            host_actions_div.appendChild(start_button);
-        }
       });
 
       // wire handlers for the single current-player button (if present)
@@ -95,13 +117,33 @@
       }
 
       const status = document.getElementById('game-status');
-      status.textContent = lobby.status === 'LOBBY' ? 'Game has not started yet' : 'Game is running';
+      if (lobby.status === 'LOBBY') {
+        status.textContent = 'Game has not started yet';
+      } else if (lobby.status === 'COUNTDOWN') {
+        status.textContent = 'Game is starting in ';
+        const lobby_countdown_timer = document.createElement('span');
+        lobby_countdown_timer.innerText = '000';
+        lobby_countdown_timer.id = 'lobby-countdown-timer';
+        status.appendChild(lobby_countdown_timer);
+        running_counter = true;
+        const server_time     = Date.parse(lobby.server_now);
+        const server_deadline = Date.parse(lobby.deadline);
+        const current_time    = Date.now();
+        stop_counter = start_counter({
+          endAtMs: server_deadline,
+          onTick: (ms) => {lobby_countdown_timer.innerText = (Math.ceil(ms/1000))}
+        })
+      } else {
+        console.assert(lobby.status === 'RUNNING');
+        window.location.href = `../game/${room_id}`;
+        status.textContent = "Game is running";
+      }
     }
 
     function escape_html(s) {
-      return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')
-                      .replaceAll('>','&gt;').replaceAll('"','&quot;')
-                      .replaceAll("'",'&#039;');
+      return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
     }
 
     // initial render
@@ -114,14 +156,15 @@
       reconnectDelay: 1000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
-      debug: (s)=>console.log('[STOMP]', s),
+      debug: (s) => console.log('[STOMP]', s),
       onConnect: () => {
         client.subscribe(`/topic/room.${room_id}.lobby`, (msg) => render_lobby(JSON.parse(msg.body)));
-        client.subscribe(`/topic/room.${room_id}.events`, (msg) => {/* handleEvent(JSON.parse(msg.body)) */});
-        client.subscribe(`/topic/room.${room_id}.game`,   (msg) => {/* renderGame(JSON.parse(msg.body))  */});
+        client.subscribe(`/topic/room.${room_id}.events`, (msg) => {/* handleEvent(JSON.parse(msg.body)) */ });
+        client.subscribe(`/topic/room.${room_id}.game`, (msg) => {/* renderGame(JSON.parse(msg.body))  */ });
       }
     });
     client.activate();
   </script>
 </body>
+
 </html>

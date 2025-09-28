@@ -43,7 +43,6 @@ public class RoomController {
         room_service.add_participant_to_room(room_id, principal.getName(), nickname);
         return "redirect:/room/" + room_id;
     }
-    
 
     @GetMapping("/{room_id}")
     public String room(Principal principal, @PathVariable String room_id, Model model) {

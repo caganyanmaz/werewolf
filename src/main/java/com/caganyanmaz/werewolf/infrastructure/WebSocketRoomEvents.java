@@ -29,4 +29,15 @@ public class WebSocketRoomEvents implements RoomEvents {
     public void game_changed(String room_id, RoomService.GameView view) {
         smt.convertAndSend("/topic/room." + room_id + ".game", view);
     }
+    
+    @Override
+    public void notice(String room_id, String message) {
+        smt.convertAndSend("/topic/room." + room_id + ".message", message);
+    }
+
+    @Override
+    public void timer_fired(String room_id, String timer_id, Map<String, Object> payload) {
+        smt.convertAndSend("/topic/room." + room_id + ".timer." + timer_id + "fired");
+    }
+
 }

@@ -1,5 +1,5 @@
 package com.caganyanmaz.werewolf.domain;
 
-public class Phase {
-    
+public enum Phase {
+    DAY, NIGHT;
 }
